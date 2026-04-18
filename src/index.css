@@ -643,6 +643,14 @@ th {
   transition: width 0.5s ease-out;
 }
 
+.skeleton {
+  background: linear-gradient(90deg, var(--color-bg) 25%, var(--color-border) 50%, var(--color-bg) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 2s infinite ease-in-out;
+  border-radius: 8px;
+  width: 100%;
+}
+
 @keyframes skeleton-loading {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }

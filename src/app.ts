@@ -73,50 +73,66 @@ class ScholarshipSystem {
   private initFirebase() {
     this.isLoading = true;
     
+    // Safety fallback: ensure loading is cleared if auth takes too long
+    const authTimeout = setTimeout(() => {
+      if (this.isLoading) {
+        console.warn('Auth initialization timed out, clearing loading state.');
+        this.isLoading = false;
+        this.render();
+      }
+    }, 8000);
+
     // Auth Listener
     onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        if (userDoc.exists()) {
-          this.currentUser = userDoc.data() as User;
-          
-          // Sync existing data for first admin if not configured
-          if (this.currentUser.email === 'forddinglasan.stats@gmail.com' && this.currentUser.role !== 'admin') {
-             await this.makeAdmin(firebaseUser.uid);
+      try {
+        if (firebaseUser) {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          if (userDoc.exists()) {
+            this.currentUser = userDoc.data() as User;
+            
+            // Sync existing data for first admin if not configured
+            if (this.currentUser.email === 'forddinglasan.stats@gmail.com' && this.currentUser.role !== 'admin') {
+               await this.makeAdmin(firebaseUser.uid);
+            }
+          } else {
+            // Create initial profile for new Google user
+            const newUser: User = {
+              id: firebaseUser.uid,
+              name: firebaseUser.displayName || 'New User',
+              email: firebaseUser.email || '',
+              role: 'applicant',
+              savedScholarships: [],
+              notifications: [],
+              profile: {
+                age: 18,
+                level: 'High School',
+                contact: '',
+                address: ''
+              }
+            };
+            await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
+            this.currentUser = newUser;
+          }
+
+          this.setupRealtimeListeners();
+          if (this.currentView === 'landing' || this.currentView === 'login' || this.currentView === 'register') {
+            this.currentView = this.currentUser.role === 'admin' ? 'admin-dashboard' : 'dashboard';
           }
         } else {
-          // Create initial profile for new Google user
-          const newUser: User = {
-            id: firebaseUser.uid,
-            name: firebaseUser.displayName || 'New User',
-            email: firebaseUser.email || '',
-            role: 'applicant',
-            savedScholarships: [],
-            notifications: [],
-            profile: {
-              age: 18,
-              level: 'High School',
-              contact: '',
-              address: ''
-            }
-          };
-          await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
-          this.currentUser = newUser;
+          this.currentUser = null;
+          this.cleanupListeners();
+          if (this.currentView !== 'landing' && this.currentView !== 'login' && this.currentView !== 'register') {
+            this.currentView = 'landing';
+          }
         }
-
-        this.setupRealtimeListeners();
-        if (this.currentView === 'landing' || this.currentView === 'login' || this.currentView === 'register') {
-          this.currentView = this.currentUser.role === 'admin' ? 'admin-dashboard' : 'dashboard';
-        }
-      } else {
-        this.currentUser = null;
-        this.cleanupListeners();
-        if (this.currentView !== 'landing' && this.currentView !== 'login' && this.currentView !== 'register') {
-          this.currentView = 'landing';
-        }
+      } catch (error) {
+        console.error('Initialization error:', error);
+        this.showToast('Failed to connect to records. Please check your data connection.', 'error');
+      } finally {
+        clearTimeout(authTimeout);
+        this.isLoading = false;
+        this.render();
       }
-      this.isLoading = false;
-      this.render();
     });
   }
 

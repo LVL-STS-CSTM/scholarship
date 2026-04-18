@@ -1,10 +1,12 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { initializeFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+}, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth();
 
 /**
@@ -12,10 +14,13 @@ export const auth = getAuth();
  */
 async function testConnection() {
   try {
+    console.log("Testing Firebase connection to:", firebaseConfig.projectId);
     await getDocFromServer(doc(db, 'test', 'connection'));
+    console.log("Firebase connection established successfully.");
   } catch (error) {
+    console.error("Firebase connection test failed:", error);
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration. The client appears to be offline.");
+      console.warn("DIAGNOSTIC: The client appears to be offline. This might be due to browser restrictions, missing Firestore initialization in the console, or domain blocking in the iframe.");
     }
   }
 }
