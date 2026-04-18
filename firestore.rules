@@ -1,0 +1,126 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isBootstrapAdmin() {
+      return isSignedIn() && request.auth.token.email == 'forddinglasan.stats@gmail.com';
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        isBootstrapAdmin()
+      );
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'name', 'email', 'role']) &&
+             data.id is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.email is string &&
+             data.role in ['applicant', 'admin', 'staff'] &&
+             (!data.keys().contains('savedScholarships') || data.savedScholarships is list) &&
+             (!data.keys().contains('profile') || data.profile is map);
+    }
+
+    function isValidScholarship(data) {
+      return data.keys().hasAll(['title', 'description', 'category', 'amount', 'deadline']) &&
+             data.title is string && data.title.size() <= 200 &&
+             data.description is string && data.description.size() <= 5000 &&
+             data.category is string &&
+             data.amount is string &&
+             data.deadline is string;
+    }
+
+    function isValidApplication(data) {
+      return data.keys().hasAll(['userId', 'scholarshipId', 'status', 'submittedAt']) &&
+             data.userId == request.auth.uid &&
+             data.scholarshipId is string &&
+             data.status in ['Pending', 'Approved', 'Rejected', 'Reviewing', 'Needs Revision', 'Interview Scheduled'] &&
+             data.submittedAt is string;
+    }
+
+    // Collection: Users
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      allow create: if isSignedIn() && isOwner(userId) && isValidUser(incoming());
+      allow update: if (isOwner(userId) || isAdmin()) && 
+                    // Strict key check for updates
+                    incoming().diff(existing()).affectedKeys().hasOnly(['name', 'savedScholarships', 'updatedAt', 'role', 'profile', 'notifications', 'vaultDocuments']) &&
+                    (incoming().role == existing().role || isAdmin());
+    }
+
+    // Collection: Scholarships
+    match /scholarships/{scholarshipId} {
+      allow read: if true;
+      
+      allow create: if isAdmin() && isValidScholarship(incoming());
+      allow update: if isAdmin() && isValidScholarship(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Collection: Applications
+    match /applications/{applicationId} {
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (isAdmin() || (resource.data.userId == request.auth.uid));
+
+      allow create: if isSignedIn() && isValidApplication(incoming()) &&
+                    exists(/databases/$(database)/documents/scholarships/$(incoming().scholarshipId));
+      
+      allow update: if isSignedIn() && (
+        (isOwner(existing().userId) && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['documents', 'status', 'updatedAt', 'formData', 'history', 'interviewDate', 'adminNotes'])) ||
+        isAdmin()
+      );
+      
+      allow delete: if isAdmin() || (isOwner(existing().userId) && existing().status == 'Pending');
+    }
+
+    // Collection: Notifications
+    match /users/{userId}/notifications/{notificationId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isAdmin() || isOwner(userId);
+    }
+
+    // Collection: Logs
+    match /logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+    }
+
+    // Admins collection
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isBootstrapAdmin();
+    }
+  }
+}

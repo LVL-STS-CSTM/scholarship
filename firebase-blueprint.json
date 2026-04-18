@@ -1,0 +1,102 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Information about a user, including their role and saved scholarships.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["applicant", "admin"] },
+        "savedScholarships": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "Scholarship": {
+      "title": "Scholarship",
+      "description": "Details about an available scholarship or financial aid program.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "requirements": { "type": "array", "items": { "type": "string" } },
+        "amount": { "type": "string" },
+        "deadline": { "type": "string" },
+        "authorId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "description", "category", "amount", "deadline"]
+    },
+    "Application": {
+      "title": "Scholarship Application",
+      "description": "A student's application for a specific scholarship.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "scholarshipId": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "Approved", "Rejected", "Reviewing"] },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "formData": { "type": "object" },
+        "documents": { "type": "array", "items": { "type": "object" } }
+      },
+      "required": ["id", "userId", "scholarshipId", "status", "submittedAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Alert sent to a user about their application or system updates.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title", "message", "read", "createdAt"]
+    },
+    "Log": {
+      "title": "System Log",
+      "description": "Audit trail for system activities.",
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "number" },
+        "level": { "type": "string", "enum": ["info", "warn", "error"] },
+        "message": { "type": "string" },
+        "user": { "type": "string" }
+      },
+      "required": ["timestamp", "level", "message", "user"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and settings."
+    },
+    "scholarships/{scholarshipId}": {
+      "schema": "Scholarship",
+      "description": "Available scholarship opportunities."
+    },
+    "applications/{applicationId}": {
+      "schema": "Application",
+      "description": "Scholarship applications submitted by users."
+    },
+    "users/{userId}/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User-specific notifications."
+    },
+    "logs/{logId}": {
+      "schema": "Log",
+      "description": "System audit logs."
+    }
+  }
+}
