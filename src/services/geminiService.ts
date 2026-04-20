@@ -48,9 +48,18 @@ class RateLimiter {
 // 10 requests per minute limit
 const geminiLimiter = new RateLimiter(10, 60 * 1000);
 
-// Initialize Gemini
-// Note: process.env.GEMINI_API_KEY is provided by the environment
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+let aiClient: GoogleGenAI | null = null;
+
+function getAIClient(): GoogleGenAI {
+  if (!aiClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY is not defined. Please check your environment variables.');
+    }
+    aiClient = new GoogleGenAI(apiKey);
+  }
+  return aiClient;
+}
 
 export async function getScholarshipMatchAnalysis(user: any, scholarship: Scholarship) {
   const limiterStatus = geminiLimiter.checkLimit();
@@ -61,6 +70,7 @@ export async function getScholarshipMatchAnalysis(user: any, scholarship: Schola
   }
 
   try {
+    const ai = getAIClient();
     const prompt = `
       You are an expert scholarship application consultant for a local Barangay.
       Analyze the match between this student profile and the scholarship requirements.

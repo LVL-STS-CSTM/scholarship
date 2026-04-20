@@ -605,17 +605,18 @@ class ScholarshipSystem {
     this.render();
   }
 
-  private render() {
-    this.appElement.innerHTML = '';
-    
-    if (this.currentView === 'landing') {
-      const wrapper = document.createElement('div');
-      wrapper.style.width = '100%';
-      wrapper.style.minHeight = '100vh';
-      this.appElement.appendChild(wrapper);
-      this.renderLanding(wrapper);
-      return;
-    }
+  private async render() {
+    try {
+      this.appElement.innerHTML = '';
+      
+      if (this.currentView === 'landing') {
+        const wrapper = document.createElement('div');
+        wrapper.style.width = '100%';
+        wrapper.style.minHeight = '100vh';
+        this.appElement.appendChild(wrapper);
+        await this.renderLanding(wrapper);
+        return;
+      }
 
     if (this.currentView === 'login' || this.currentView === 'register') {
       const authWrapper = document.createElement('div');
@@ -654,6 +655,10 @@ class ScholarshipSystem {
       case 'admin-users': this.renderAdminUsers(viewContainer); break;
       case 'admin-logs': this.renderAdminLogs(viewContainer); break;
       case 'vault': this.renderVault(viewContainer); break;
+    }
+    } catch (error) {
+      console.error('Critical Render Error:', error);
+      this.showToast('Something went wrong. Please refresh the page.', 'error');
     }
   }
 
@@ -1056,6 +1061,34 @@ class ScholarshipSystem {
       for (const note of unreadNotes) {
         await updateDoc(doc(db, 'users', this.currentUser.id, 'notifications', note.id), { read: true });
       }
+    }
+  }
+
+  public async exportToPDF(appId: string) {
+    const element = document.getElementById('application-details-content');
+    if (!element) return;
+    
+    const html2pdf = (window as any).html2pdf;
+    if (!html2pdf) {
+      this.showToast('PDF Export tool is still loading. Please try again in a few seconds.', 'info');
+      return;
+    }
+
+    this.showToast('Generating PDF...', 'info');
+    const opt = {
+      margin: 10,
+      filename: `application-${appId}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    
+    try {
+      await html2pdf().from(element).set(opt).save();
+      this.showToast('PDF generated successfully!', 'success');
+    } catch (e) {
+      console.error('PDF export error:', e);
+      this.showToast('Failed to generate PDF.', 'error');
     }
   }
 
