@@ -14,8 +14,8 @@ export function renderLogin(parent: HTMLElement, system: any) {
         <h2 style="font-size: 2.5rem; margin-bottom: 1rem; color: var(--color-primary-dark); font-family: var(--font-heading);">Welcome Back</h2>
         <p style="color: var(--color-secondary); margin-bottom: 3rem; font-size: 1.125rem;">Sign in to access your dashboard and track your applications.</p>
         
-        <button class="btn btn-primary" onclick="window.system.loginWithGoogle()" style="width: 100%; height: 56px; font-size: 1.125rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 1rem; border-radius: 12px; box-shadow: var(--shadow-md);">
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="24" height="24" style="background: white; border-radius: 4px; padding: 2px;">
+        <button id="google-login-btn" class="btn btn-primary" onclick="window.system.loginWithGoogle()" style="width: 100%; height: 56px; font-size: 1.125rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 1rem; border-radius: 12px; box-shadow: var(--shadow-md);">
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="24" height="24" style="background: white; border-radius: 4px; padding: 2px;" referrerPolicy="no-referrer">
           Continue with Google
         </button>
 

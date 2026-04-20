@@ -8,12 +8,31 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "email": { "type": "string", "format": "email" },
-        "role": { "type": "string", "enum": ["applicant", "admin"] },
+        "role": { "type": "string", "enum": ["applicant", "admin", "staff"] },
         "savedScholarships": { "type": "array", "items": { "type": "string" } },
+        "age": { "type": "integer" },
+        "gpa": { "type": "number" },
+        "phone": { "type": "string" },
+        "bio": { "type": "string" },
+        "vaultDocuments": { "type": "array", "items": { "$ref": "DocumentVaultItem" } },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "name", "email", "role"]
+    },
+    "DocumentVaultItem": {
+      "title": "Document Vault Item",
+      "description": "A document stored in a user's vault.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["Identification", "Academic", "Financial", "Other"] },
+        "status": { "type": "string", "enum": ["Pending", "Approved", "Rejected"] },
+        "url": { "type": "string" },
+        "uploadedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "type", "status", "url", "uploadedAt"]
     },
     "Scholarship": {
       "title": "Scholarship",

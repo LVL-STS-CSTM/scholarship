@@ -8,32 +8,15 @@ import {
 import { 
   onAuthStateChanged, 
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut
 } from 'firebase/auth';
-import { 
-  collection, 
-  onSnapshot, 
-  doc, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  query, 
-  where,
-  addDoc,
-  deleteDoc,
-  orderBy,
-  arrayUnion
-} from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, addDoc, onSnapshot, query, where, orderBy, arrayUnion } from 'firebase/firestore';
 import { auth, db, handleFirestoreError } from './services/firebase';
-
-import { renderLanding } from './views/LandingView';
-import { renderLogin, renderRegister } from './views/AuthView';
-
-import { renderProfile, renderApplicantDashboard, renderScholarshipCatalog, renderSavedScholarships } from './views/ApplicantView';
-import { renderVault } from './views/DocumentVaultView';
-import { renderAdminDashboard, renderAdminReports, renderAdminUsers, renderAdminLogs } from './views/AdminView';
-import { openEditScholarshipModal, openCreateScholarshipModal, openApplyModal, openUploadDocumentModal, editUserRole } from './views/Modals';
+import { translations } from './translations';
+import { getScholarshipMatchAnalysis, getGeminiUsage } from './services/geminiService';
 
 declare const Chart: any;
 
@@ -50,6 +33,8 @@ class ScholarshipSystem {
   private searchQuery: string = '';
   private scholarshipSearch: string = '';
   private statusFilter: string = 'All';
+  private amountFilter: string = 'All';
+  private deadlineFilter: string = 'All';
   private showSmartMatches: boolean = false;
   private adminCurrentPage: number = 1;
   private adminFilterStatus: string = 'All';
@@ -73,6 +58,14 @@ class ScholarshipSystem {
   private initFirebase() {
     this.isLoading = true;
     
+    // Check for redirect result (handles mobile login callback)
+    getRedirectResult(auth).catch((error) => {
+      console.error('Redirect result error:', error);
+      if (error.code === 'auth/internal-error' || error.message.includes('missing initial state')) {
+        this.showToast('Login error: Please ensure you are not using Private/Incognito mode.', 'error');
+      }
+    });
+
     // Safety fallback: ensure loading is cleared if auth takes too long
     const authTimeout = setTimeout(() => {
       if (this.isLoading) {
@@ -235,9 +228,25 @@ class ScholarshipSystem {
     try {
       this.isLoading = true;
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      this.showToast('Login failed', 'error');
+      
+      // Force account selection
+      provider.setCustomParameters({ prompt: 'select_account' });
+
+      // Use redirect for mobile to avoid popup issues
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      if (isMobile) {
+        await signInWithRedirect(auth, provider);
+      } else {
+        await signInWithPopup(auth, provider);
+      }
+    } catch (error: any) {
+      console.error('Login error:', error);
+      if (error.code === 'auth/popup-blocked') {
+        this.showToast('Please enable popups for this site.', 'error');
+      } else {
+        this.showToast('Login failed. Please check your connection.', 'error');
+      }
     } finally {
       this.isLoading = false;
     }
@@ -274,48 +283,18 @@ class ScholarshipSystem {
     this.render();
   }
 
-  private t(key: string): string {
-    const translations: Record<string, Record<'en' | 'fil', string>> = {
-      'Overview': { en: 'Overview', fil: 'Pangkalahatang-ideya' },
-      'Reports': { en: 'Reports', fil: 'Mga Ulat' },
-      'User Management': { en: 'User Management', fil: 'Pamamahala ng User' },
-      'System Logs': { en: 'System Logs', fil: 'Mga Log ng System' },
-      'Applications': { en: 'Applications', fil: 'Mga Aplikasyon' },
-      'Document Vault': { en: 'Document Vault', fil: 'Taguan ng Dokumento' },
-      'Dashboard': { en: 'Dashboard', fil: 'Dashboard' },
-      'Scholarships': { en: 'Scholarships', fil: 'Mga Scholarship' },
-      'Saved': { en: 'Saved', fil: 'Na-save' },
-      'My Documents': { en: 'My Documents', fil: 'Aking Mga Dokumento' },
-      'Profile': { en: 'Profile', fil: 'Profile' },
-      'About Portal': { en: 'About Portal', fil: 'Tungkol sa Portal' },
-      'Sign Out': { en: 'Sign Out', fil: 'Mag-sign Out' },
-      'My Applications': { en: 'My Applications', fil: 'Aking Mga Aplikasyon' },
-      'Scholarship Catalog': { en: 'Scholarship Catalog', fil: 'Katalogo ng Scholarship' },
-      'Saved Scholarships': { en: 'Saved Scholarships', fil: 'Mga Na-save na Scholarship' },
-      'Account Settings': { en: 'Account Settings', fil: 'Mga Setting ng Account' },
-      'Admin Overview': { en: 'Admin Overview', fil: 'Pangkalahatang-ideya ng Admin' },
-      'Data-Driven Reports': { en: 'Data-Driven Reports', fil: 'Mga Ulat na Batay sa Data' },
-      'Approved': { en: 'Approved', fil: 'Naaprubahan' },
-      'In Progress': { en: 'In Progress', fil: 'Kasalukuyang Pinoproseso' },
-      'Upcoming Interviews': { en: 'Upcoming Interviews', fil: 'Mga Paparating na Panayam' },
-      'View Details': { en: 'View Details', fil: 'Tingnan ang mga Detalye' },
-      'Recent Applications': { en: 'Recent Applications', fil: 'Mga Kamakailang Aplikasyon' },
-      'Recent Activity': { en: 'Recent Activity', fil: 'Kamakailang Aktibidad' },
-      'Status': { en: 'Status', fil: 'Katayuan' },
-      'Date': { en: 'Date', fil: 'Petsa' },
-      'Action': { en: 'Action', fil: 'Aksyon' },
-      'Apply Now': { en: 'Apply Now', fil: 'Mag-apply Ngayon' },
-      'Save': { en: 'Save', fil: 'I-save' },
-      'Deadline': { en: 'Deadline', fil: 'Huling Araw' },
-      'Amount': { en: 'Amount', fil: 'Halaga' },
-      'Post Scholarship': { en: 'Post Scholarship', fil: 'Mag-post ng Scholarship' },
-      'Export Data': { en: 'Export Data', fil: 'I-export ang Data' },
-      'Edit': { en: 'Edit', fil: 'I-edit' },
-      'Delete': { en: 'Delete', fil: 'Tanggalin' },
-      'Cancel': { en: 'Cancel', fil: 'Kanselahin' },
-      'Confirm Deletion': { en: 'Confirm Deletion', fil: 'Kumpirmahin ang Pagbura' },
-      'Update Scholarship': { en: 'Update Scholarship', fil: 'I-update ang Scholarship' }
-    };
+  public async withdrawApplication(id: string) {
+    if (!confirm(this.t('Are you sure you want to withdraw this application?'))) return;
+    try {
+      await deleteDoc(doc(db, 'applications', id));
+      this.showToast(this.t('Application withdrawn.'), 'info');
+      this.addLog('warn', `Application ${id} withdrawn by user.`);
+    } catch (e) {
+      handleFirestoreError(e, 'update', `applications/${id}`);
+    }
+  }
+
+  public t(key: string): string {
     return translations[key]?.[this.language] || key;
   }
 
@@ -371,30 +350,104 @@ class ScholarshipSystem {
     let score = 0;
     
     // Age check
-    if (scholarship.minAge && app.age! >= scholarship.minAge) score += 25;
-    if (scholarship.maxAge && app.age! <= scholarship.maxAge) score += 25;
+    if (scholarship.minAge && app.age! >= scholarship.minAge) score += 20;
+    if (scholarship.maxAge && app.age! <= scholarship.maxAge) score += 20;
     
-    // Level check
-    if (app.level === 'Undergraduate') score += 20;
-    else if (app.level === 'Postgraduate') score += 15;
-    else score += 10;
+    // Level check - Exact match check
+    if (app.level === scholarship.category || scholarship.title.includes(app.level || '')) {
+      score += 20;
+    } else if (app.level === 'Undergraduate') {
+      score += 15;
+    } else {
+      score += 10;
+    }
 
     // GPA check
-    if (scholarship.requirements.some(r => r.toLowerCase().includes('gpa'))) {
-      if (app.gpa && app.gpa >= 3.5) score += 20;
-      else if (app.gpa && app.gpa >= 3.0) score += 10;
+    const gpaRequirement = scholarship.requirements.find(r => r.toLowerCase().includes('gpa'));
+    if (gpaRequirement) {
+      const minGpaMatch = gpaRequirement.match(/[0-9]\.[0-9]/);
+      const minGpa = minGpaMatch ? parseFloat(minGpaMatch[0]) : 3.0;
+      
+      if (app.gpa && app.gpa >= minGpa) score += 30;
+      else if (app.gpa && app.gpa >= minGpa - 0.5) score += 15;
     } else {
-      score += 20; // Free points if GPA not required
+      score += 30; // Free points if GPA not specifically mentioned in requirements
     }
 
     // Data completeness
-    if (app.name && app.contact && app.fileName) score += 10;
+    if (app.name && app.contact && (app.documents && app.documents.length > 0)) score += 10;
 
     let status: 'Passed' | 'Flagged' | 'Failed' = 'Flagged';
-    if (score >= 80) status = 'Passed';
-    else if (score < 40) status = 'Failed';
+    if (score >= 85) status = 'Passed';
+    else if (score < 50) status = 'Failed';
 
     return { score, status };
+  }
+
+  public calculateProfileCompleteness(): number {
+    if (!this.currentUser) return 0;
+    let points = 0;
+    const total = 6;
+
+    if (this.currentUser.name) points++;
+    if (this.currentUser.age) points++;
+    if (this.currentUser.level) points++;
+    if (this.currentUser.gpa) points++;
+    if (this.currentUser.email) points++;
+    if (this.currentUser.vaultDocuments && this.currentUser.vaultDocuments.length > 0) points++;
+
+    return Math.round((points / total) * 100);
+  }
+
+  public async getAIAnalysis(scholarshipId: string) {
+    if (!this.currentUser) {
+      this.showToast('Please sign in to use AI analysis.', 'error');
+      return;
+    }
+
+    const scholarship = this.scholarships.find(s => s.id === scholarshipId);
+    if (!scholarship) return;
+
+    try {
+      this.showToast('AI is analyzing your profile...', 'info');
+      const analysis = await getScholarshipMatchAnalysis(this.currentUser, scholarship);
+      
+      const content = `
+        <div class="fade-in">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+            <div style="font-size: 2.5rem; font-weight: 800; color: var(--color-primary);">${analysis.score}%</div>
+            <span class="status-badge status-${analysis.status.toLowerCase()}">${analysis.status}</span>
+          </div>
+          
+          <div style="background: var(--color-bg); padding: 1rem; border-radius: 0.75rem; margin-bottom: 1.5rem; line-height: 1.5;">
+            <p>${analysis.feedback}</p>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+              <h4 style="font-size: 0.75rem; font-weight: 700; color: var(--color-success); text-transform: uppercase; margin-bottom: 0.5rem;">Strengths</h4>
+              <ul style="font-size: 0.8125rem; color: var(--color-secondary); padding-left: 1.25rem;">
+                ${analysis.strengths.map((s: string) => `<li>${s}</li>`).join('')}
+              </ul>
+            </div>
+            <div>
+              <h4 style="font-size: 0.75rem; font-weight: 700; color: var(--color-warning); text-transform: uppercase; margin-bottom: 0.5rem;">Focus Areas</h4>
+              <ul style="font-size: 0.8125rem; color: var(--color-secondary); padding-left: 1.25rem;">
+                ${analysis.gaps.map((g: string) => `<li>${g}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+          
+          <div style="margin-top: 2rem; font-size: 0.7rem; color: var(--color-secondary); text-align: center; font-style: italic;">
+            Powered by Gemini AI • Rate limited for cost management
+          </div>
+        </div>
+      `;
+      
+      this.showModal(`AI Analysis: ${scholarship.title}`, content);
+    } catch (error: any) {
+      this.showToast(error.message || 'AI analysis failed.', 'error');
+    }
   }
 
   public async toggleSaveScholarship(id: string) {
@@ -409,6 +462,40 @@ class ScholarshipSystem {
     } catch (e) {
       handleFirestoreError(e, 'update', `users/${this.currentUser.id}`);
     }
+  }
+
+  public exportToCSV() {
+    if (this.applications.length === 0) {
+      this.showToast('No data available to export.', 'info');
+      return;
+    }
+
+    const headers = ['Applicant Name', 'Contact', 'Level', 'Scholarship', 'Status', 'Score', 'Verification', 'Application Date'];
+    const rows = this.applications.map(app => [
+      app.name,
+      app.contact,
+      app.level,
+      this.scholarships.find(s => s.id === app.scholarshipId)?.title || 'Unknown',
+      app.status,
+      app.verificationScore,
+      app.verificationStatus,
+      new Date(app.timestamp).toLocaleDateString()
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Barangay_Scholarship_Data_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    this.addLog('info', 'Administrative data exported to CSV.');
+    this.showToast('Data exported successfully!', 'success');
   }
 
   public async deleteScholarship(id: string) {
@@ -499,29 +586,18 @@ class ScholarshipSystem {
     }
   }
 
-  public exportToCSV() {
-    if (this.applications.length === 0) {
-      this.showToast('No data to export.', 'error');
-      return;
-    }
-    const headers = ['ID', 'Name', 'Age', 'Level', 'Category', 'Contact', 'Status', 'Submitted', 'Verification Score'];
-    const rows = this.applications.map(app => [
-      app.id, app.name, app.age, app.level, app.category, app.contact, app.status, new Date(app.timestamp).toLocaleString(), app.verificationScore
-    ]);
-    const csvContent = [headers.join(','), ...rows.map(row => row.map(cell => `"${cell}"`).join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `scholarship_applications_${Date.now()}.csv`;
-    link.click();
-    this.showToast('Export successful.', 'success');
-  }
-
   public setView(view: View) {
+    this.isSidebarOpen = false; // Close sidebar on mobile navigation
     this.simulateLoading(() => {
       this.currentView = view;
       this.render();
     });
+  }
+
+  public setAdminStatusFilter(status: string) {
+    this.adminFilterStatus = status;
+    this.adminCurrentPage = 1;
+    this.render();
   }
 
   public changeAdminPage(delta: number) {
@@ -546,8 +622,8 @@ class ScholarshipSystem {
       authWrapper.style.width = '100%';
       authWrapper.style.minHeight = '100vh';
       this.appElement.appendChild(authWrapper);
-      if (this.currentView === 'login') renderLogin(authWrapper, this);
-      else renderRegister(authWrapper, this);
+      if (this.currentView === 'login') this.renderLogin(authWrapper);
+      else this.renderRegister(authWrapper);
       return;
     }
 
@@ -564,16 +640,20 @@ class ScholarshipSystem {
 
     this.renderTopBar(main);
 
+    const viewContainer = document.createElement('div');
+    viewContainer.id = 'view-container';
+    main.appendChild(viewContainer);
+
     switch (this.currentView) {
-      case 'dashboard': this.renderApplicantDashboard(main); break;
-      case 'scholarships': this.renderScholarshipCatalog(main); break;
-      case 'saved': this.renderSavedScholarships(main); break;
-      case 'profile': this.renderProfile(main); break;
-      case 'admin-dashboard': this.renderAdminDashboard(main); break;
-      case 'admin-reports': this.renderAdminReports(main); break;
-      case 'admin-users': this.renderAdminUsers(main); break;
-      case 'admin-logs': this.renderAdminLogs(main); break;
-      case 'vault': this.renderVault(main); break;
+      case 'dashboard': this.renderApplicantDashboard(viewContainer); break;
+      case 'scholarships': this.renderScholarshipCatalog(viewContainer); break;
+      case 'saved': this.renderSavedScholarships(viewContainer); break;
+      case 'profile': this.renderProfile(viewContainer); break;
+      case 'admin-dashboard': this.renderAdminDashboard(viewContainer); break;
+      case 'admin-reports': this.renderAdminReports(viewContainer); break;
+      case 'admin-users': this.renderAdminUsers(viewContainer); break;
+      case 'admin-logs': this.renderAdminLogs(viewContainer); break;
+      case 'vault': this.renderVault(viewContainer); break;
     }
   }
 
@@ -649,6 +729,7 @@ class ScholarshipSystem {
   }
 
   private renderTopBar(parent: HTMLElement) {
+    if (!this.currentUser) return;
     const topBar = document.createElement('div');
     topBar.className = 'header';
     const unreadCount = this.currentUser?.notifications?.filter(n => !n.read).length || 0;
@@ -710,20 +791,41 @@ class ScholarshipSystem {
     parent.appendChild(skeleton);
   }
 
-  private renderLanding(parent: HTMLElement) {
+  private async renderWithProgress(parent: HTMLElement, importFn: () => Promise<any>, renderCallback: (module: any) => void) {
+    const progress = document.createElement('div');
+    progress.className = 'loading-progress';
+    document.body.appendChild(progress);
+    this.renderSkeleton(parent);
+
+    try {
+      const module = await importFn();
+      parent.innerHTML = '';
+      renderCallback(module);
+    } catch (e) {
+      console.error('View load error:', e);
+      this.showToast(this.t('Failed to load view. Please check your connection.'), 'error');
+    } finally {
+      progress.remove();
+    }
+  }
+
+  private async renderLanding(parent: HTMLElement) {
+    const { renderLanding } = await import('./views/LandingView');
     renderLanding(parent);
   }
 
-  private renderLogin(parent: HTMLElement) {
+  private async renderLogin(parent: HTMLElement) {
+    const { renderLogin } = await import('./views/AuthView');
     renderLogin(parent, this);
   }
 
-  private renderRegister(parent: HTMLElement) {
+  private async renderRegister(parent: HTMLElement) {
+    const { renderRegister } = await import('./views/AuthView');
     renderRegister(parent, this);
   }
 
-  private renderScholarshipCatalog(parent: HTMLElement) {
-    renderScholarshipCatalog(parent, this);
+  private async renderScholarshipCatalog(parent: HTMLElement) {
+    this.renderWithProgress(parent, () => import('./views/ApplicantView'), (m) => m.renderScholarshipCatalog(parent, this));
   }
 
   public async smartApply(scholarshipId: string) {
@@ -732,80 +834,105 @@ class ScholarshipSystem {
     if (!s) return;
 
     if (this.applications.some(a => a.userId === this.currentUser!.id && a.scholarshipId === scholarshipId)) {
-      this.showToast('You have already applied for this scholarship.', 'error');
+      this.showToast(this.t('You have already applied for this scholarship.'), 'error');
       return;
     }
 
     const verification = this.performAutoVerification({
       name: this.currentUser.name,
-      age: 20, 
-      level: 'Undergraduate',
+      age: this.currentUser.age || 18, 
+      level: this.currentUser.profile?.level || 'Undergraduate',
       contact: this.currentUser.email,
       fileName: 'profile_docs.pdf'
     }, s);
 
-    const documents = s.requirements.map((req) => ({
-      id: Math.random().toString(36).substr(2, 9),
-      name: req + ' (Auto-filled)',
-      type: 'Requirement',
-      status: 'Pending' as const,
-      url: '#'
-    }));
+    const documents = s.requirements.map((req) => {
+      // Try to find a matching document in the vault automatically
+      const vaultDocs = this.currentUser!.vaultDocuments || [];
+      const bestMatch = vaultDocs.find(d => 
+        d.name.toLowerCase().includes(req.toLowerCase()) || 
+        d.type.toLowerCase().includes(req.toLowerCase())
+      );
+
+      return {
+        id: Math.random().toString(36).substr(2, 9),
+        name: req + (bestMatch ? ` (${bestMatch.name})` : ' (Auto-filled)'),
+        type: bestMatch ? bestMatch.type : 'Requirement',
+        status: bestMatch ? bestMatch.status : 'Pending' as const,
+        url: bestMatch ? bestMatch.url : '#',
+        vaultDocId: bestMatch ? bestMatch.id : undefined
+      };
+    });
 
     try {
       await addDoc(collection(db, 'applications'), {
         userId: this.currentUser.id,
         scholarshipId: s.id,
+        scholarshipTitle: s.title,
         name: this.currentUser.name,
-        age: 20,
-        level: 'Undergraduate',
+        age: this.currentUser.age || 18,
+        level: this.currentUser.profile?.level || 'Undergraduate',
         category: s.category,
         contact: this.currentUser.email,
-        fileName: 'profile_docs.pdf',
         documents: documents,
         status: 'Pending',
-        timestamp: Date.now(),
+        submittedAt: new Date().toISOString(),
         verificationScore: verification.score,
-        verificationStatus: verification.status,
-        submittedAt: new Date().toISOString()
+        verificationStatus: verification.status
       });
       this.addLog('info', `Smart Application submitted by ${this.currentUser.name} for ${s.title}.`);
-      this.showToast(`Smart Application submitted for ${s.title}!`, 'success');
+      this.showToast(this.t('Application submitted successfully!'), 'success');
       this.setView('dashboard');
     } catch (e) {
       handleFirestoreError(e, 'create', 'applications');
     }
   }
 
-  private renderSavedScholarships(parent: HTMLElement) {
-    renderSavedScholarships(parent, this);
+  public async scheduleInterview(appId: string, interviewDate: string, adminNotes: string) {
+    try {
+      await updateDoc(doc(db, 'applications', appId), {
+        status: 'Interview Scheduled',
+        interviewDate,
+        adminNotes,
+        updatedAt: new Date().toISOString()
+      });
+      this.addLog('info', `Interview scheduled for application ${appId} on ${interviewDate}`);
+      this.showToast(this.t('Interview scheduled successfully!'), 'success');
+    } catch (e) {
+      handleFirestoreError(e, 'update', `applications/${appId}`);
+    }
   }
 
-  private renderApplicantDashboard(parent: HTMLElement) {
-    renderApplicantDashboard(parent, this);
+  private async renderSavedScholarships(parent: HTMLElement) {
+    this.renderWithProgress(parent, () => import('./views/ApplicantView'), (m) => m.renderSavedScholarships(parent, this));
   }
 
-  private renderAdminDashboard(parent: HTMLElement) {
-    renderAdminDashboard(parent, this);
+  private async renderApplicantDashboard(parent: HTMLElement) {
+    this.renderWithProgress(parent, () => import('./views/ApplicantView'), (m) => m.renderApplicantDashboard(parent, this));
   }
 
-  private renderAdminReports(parent: HTMLElement) {
-    renderAdminReports(parent, this, Chart);
+  private async renderAdminDashboard(parent: HTMLElement) {
+    this.renderWithProgress(parent, () => import('./views/AdminView'), (m) => m.renderAdminDashboard(parent, this));
   }
 
-  private renderAdminUsers(parent: HTMLElement) {
-    renderAdminUsers(parent, this);
+  private async renderAdminReports(parent: HTMLElement) {
+    this.renderWithProgress(parent, () => import('./views/AdminView'), (m) => m.renderAdminReports(parent, this, Chart));
   }
 
-  private renderAdminLogs(parent: HTMLElement) {
-    renderAdminLogs(parent, this);
+  private async renderAdminUsers(parent: HTMLElement) {
+    this.renderWithProgress(parent, () => import('./views/AdminView'), (m) => m.renderAdminUsers(parent, this));
   }
 
-  private renderVault(parent: HTMLElement) {
-    renderVault(parent, this);
+  private async renderAdminLogs(parent: HTMLElement) {
+    this.renderWithProgress(parent, () => import('./views/AdminView'), (m) => m.renderAdminLogs(parent, this));
   }
 
-  public openUploadDocumentModal() {
+  private async renderVault(parent: HTMLElement) {
+    this.renderWithProgress(parent, () => import('./views/DocumentVaultView'), (m) => m.renderVault(parent, this));
+  }
+
+  public async openUploadDocumentModal() {
+    const { openUploadDocumentModal } = await import('./views/Modals');
     openUploadDocumentModal(this);
   }
 
@@ -822,10 +949,25 @@ class ScholarshipSystem {
 
   public triggerBackup() {
     this.addLog('info', 'System backup initiated manually.');
-    this.showToast('System backup completed successfully.', 'success');
+    const backupData = {
+      scholarships: this.scholarships,
+      applications: this.applications,
+      logs: this.logs,
+      timestamp: new Date().toISOString(),
+      version: '1.0.0'
+    };
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Barangay_Scholarship_Backup_${Date.now()}.json`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    this.showToast('System backup data dump downloaded successfully.', 'success');
   }
 
-  public editUserRole(id: string) {
+  public async editUserRole(id: string) {
+    const { editUserRole } = await import('./views/Modals');
     editUserRole(this, id);
   }
 
@@ -845,8 +987,53 @@ class ScholarshipSystem {
     }
   }
 
-  private renderProfile(parent: HTMLElement) {
-    renderProfile(parent, this);
+  public async bulkUpdateStatus(status: string) {
+    const checkboxes = document.querySelectorAll('.app-checkbox:checked') as NodeListOf<HTMLInputElement>;
+    const ids = Array.from(checkboxes).map(cb => cb.dataset.id).filter(id => id);
+    
+    if (ids.length === 0) return;
+    if (!confirm(`Are you sure you want to update ${ids.length} applications to ${status}?`)) return;
+
+    try {
+      this.isLoading = true;
+      for (const id of ids) {
+        await this.updateApplicationStatus(id!, status);
+      }
+      this.addLog('warn', `Bulk status update performed: ${ids.length} apps set to ${status}.`);
+      this.showToast(`Batch update successful: ${ids.length} applications ${status.toLowerCase()}.`, 'success');
+    } catch (e) {
+      this.showToast('Batch update failed partially. Check logs.', 'error');
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  private async renderProfile(parent: HTMLElement) {
+    this.renderWithProgress(parent, () => import('./views/ApplicantView'), (m) => m.renderProfile(parent, this));
+  }
+
+  public async updateProfile(data: any) {
+    if (!this.currentUser) return;
+    try {
+      this.isLoading = true;
+      const userRef = doc(db, 'users', this.currentUser.id);
+      await updateDoc(userRef, {
+        ...data,
+        updatedAt: new Date().toISOString()
+      });
+      this.addLog('info', 'User profile updated.');
+      this.showToast('Profile updated successfully.', 'success');
+      this.render();
+    } catch (e) {
+      handleFirestoreError(e, 'update', `users/${this.currentUser.id}`);
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  // Fallback for legacy view calls
+  public async saveUsers() {
+    console.warn('saveUsers is deprecated. Use updateProfile or specific Firestore updates.');
   }
 
   public async showNotifications() {
@@ -1051,35 +1238,7 @@ class ScholarshipSystem {
   }
 
   public async promptScheduleInterview(appId: string) {
-    const dateStr = prompt('Enter interview date and time (YYYY-MM-DD HH:MM):');
-    if (dateStr) {
-      const date = new Date(dateStr).getTime();
-      if (!isNaN(date)) {
-        try {
-          const appRef = doc(db, 'applications', appId);
-          const historyItem = { 
-            status: 'Interview Scheduled', 
-            timestamp: Date.now(), 
-            note: `Interview scheduled for ${new Date(date).toLocaleString()}.` 
-          };
-
-          await updateDoc(appRef, {
-            interviewDate: date,
-            status: 'Interview Scheduled',
-            history: arrayUnion(historyItem),
-            updatedAt: new Date().toISOString()
-          });
-
-          this.addNotification(appId, 'Interview Scheduled', `Your interview has been scheduled for ${new Date(date).toLocaleString()}.`);
-          this.showToast('Interview scheduled successfully.', 'success');
-          document.querySelector('.modal-overlay')?.remove();
-        } catch (e) {
-          handleFirestoreError(e, 'update', `applications/${appId}`);
-        }
-      } else {
-        this.showToast('Invalid date format.', 'error');
-      }
-    }
+    this.openScheduleInterviewModal(appId);
   }
 
   public async flagDocument(appId: string, docId: string) {
@@ -1131,15 +1290,25 @@ class ScholarshipSystem {
 
     const options = vaultDocs.map(d => `<option value="${d.id}">${d.name} (${d.type})</option>`).join('');
     const content = `
-      <div class="form-group">
-        <label>Select Replacement Document from Vault</label>
-        <select id="replacement-doc-select">
-          ${options}
-        </select>
+      <div id="replace-doc-container">
+        <div class="form-group">
+          <label>Select Replacement Document from Vault</label>
+          <select id="replacement-doc-select">
+            ${options}
+          </select>
+        </div>
+        <button id="execute-replace-btn" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Replace Document</button>
       </div>
-      <button class="btn btn-primary" style="width: 100%;" onclick="window.system.executeReplaceDocument('${appId}', '${docId}', (document.getElementById('replacement-doc-select') as HTMLSelectElement).value)">Replace Document</button>
     `;
     this.showModal('Replace Document', content);
+
+    const btn = document.getElementById('execute-replace-btn');
+    const select = document.getElementById('replacement-doc-select') as HTMLSelectElement;
+    if (btn && select) {
+      btn.addEventListener('click', () => {
+        this.executeReplaceDocument(appId, docId, select.value);
+      });
+    }
   }
 
   public async executeReplaceDocument(appId: string, oldDocId: string, newVaultDocId: string) {
@@ -1188,16 +1357,24 @@ class ScholarshipSystem {
     }
   }
 
-  public openEditScholarshipModal(id: string) {
+  public async openEditScholarshipModal(id: string) {
+    const { openEditScholarshipModal } = await import('./views/Modals');
     openEditScholarshipModal(this, id);
   }
 
-  public openCreateScholarshipModal() {
+  public async openCreateScholarshipModal() {
+    const { openCreateScholarshipModal } = await import('./views/Modals');
     openCreateScholarshipModal(this);
   }
 
-  public openApplyModal(scholarshipId: string) {
+  public async openApplyModal(scholarshipId: string) {
+    const { openApplyModal } = await import('./views/Modals');
     openApplyModal(this, scholarshipId);
+  }
+
+  public async openScheduleInterviewModal(appId: string) {
+    const { openScheduleInterviewModal } = await import('./views/Modals');
+    openScheduleInterviewModal(this, appId);
   }
 }
 

@@ -27,8 +27,8 @@ export function openUploadDocumentModal(system: any) {
         </select>
       </div>
       <div class="form-group">
-        <label>File</label>
-        <input type="file" name="file" required>
+        <label>File (PDF, PNG, JPG - Max 5MB)</label>
+        <input type="file" name="file" required accept=".pdf,.png,.jpg,.jpeg">
       </div>
       <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Upload to Vault</button>
     </form>
@@ -40,7 +40,26 @@ export function openUploadDocumentModal(system: any) {
     if (!system.currentUser) return;
     
     try {
-      const formData = new FormData(e.target as HTMLFormElement);
+      const form = e.target as HTMLFormElement;
+      const fileInput = form.querySelector('input[type="file"]') as HTMLInputElement;
+      const file = fileInput.files?.[0];
+
+      if (file) {
+        // Size validation (5MB)
+        if (file.size > 5 * 1024 * 1024) {
+          system.showToast('File is too large. Maximum size is 5MB.', 'error');
+          return;
+        }
+        
+        // Type validation
+        const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+        if (!allowedTypes.includes(file.type)) {
+          system.showToast('Invalid file type. Please upload a PDF or image.', 'error');
+          return;
+        }
+      }
+
+      const formData = new FormData(form);
       const newDoc: any = {
         id: Math.random().toString(36).substr(2, 9),
         name: formData.get('name') as string,
@@ -66,17 +85,31 @@ export function editUserRole(system: any, id: string) {
   const user = system.users.find((u: any) => u.id === id);
   if (!user) return;
   const content = `
-    <div class="form-group">
-      <label>Select New Role for ${user.name}</label>
-      <select id="new-role-select">
-        <option value="applicant" ${user.role === 'applicant' ? 'selected' : ''}>Applicant</option>
-        <option value="staff" ${user.role === 'staff' ? 'selected' : ''}>Staff</option>
-        <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
-      </select>
+    <div id="edit-user-role-container">
+      <div style="background: var(--color-bg); padding: 1rem; border-radius: 0.75rem; margin-bottom: 1.5rem; border: 1px solid var(--color-border);">
+        <div style="font-weight: 700; font-size: 1.125rem;">${user.name}</div>
+        <div style="font-size: 0.875rem; color: var(--color-secondary);">${user.email}</div>
+        <div style="font-size: 0.75rem; color: var(--color-primary); margin-top: 0.25rem;">Current Role: <span style="text-transform: capitalize;">${user.role}</span></div>
+      </div>
+      <div class="form-group">
+        <label>Select New Role</label>
+        <select id="new-role-select">
+          <option value="applicant" ${user.role === 'applicant' ? 'selected' : ''}>Applicant</option>
+          <option value="staff" ${user.role === 'staff' ? 'selected' : ''}>Staff</option>
+          <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
+        </select>
+      </div>
+      <button id="update-role-btn" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Update Role</button>
     </div>
-    <button class="btn btn-primary" style="width: 100%;" onclick="window.system.saveUserRole('${user.id}', (document.getElementById('new-role-select') as HTMLSelectElement).value)">Update Role</button>
   `;
   system.showModal('Edit User Role', content);
+
+  document.getElementById('update-role-btn')?.addEventListener('click', async () => {
+    const select = document.getElementById('new-role-select') as HTMLSelectElement;
+    if (select) {
+      await system.saveUserRole(user.id, select.value);
+    }
+  });
 }
 export function openEditScholarshipModal(system: any, id: string) {
   const s = system.scholarships.find((x: any) => x.id === id);
@@ -193,6 +226,33 @@ export function openCreateScholarshipModal(system: any) {
     } catch (err) {
       handleFirestoreError(err, 'create', 'scholarships');
     }
+  });
+}
+
+export function openScheduleInterviewModal(system: any, appId: string) {
+  const content = `
+    <form id="schedule-interview-form">
+      <div class="form-group">
+        <label>${system.t('Interview Date & Time')}</label>
+        <input type="datetime-local" name="interviewDate" required>
+      </div>
+      <div class="form-group">
+        <label>${system.t('Admin Notes / Instructions')}</label>
+        <textarea name="adminNotes" placeholder="e.g., Room 302, Barangay Hall. Please bring original documents."></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">${system.t('Schedule Interview')}</button>
+    </form>
+  `;
+  system.showModal(system.t('Schedule Interview'), content);
+
+  document.getElementById('schedule-interview-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const date = formData.get('interviewDate') as string;
+    const notes = formData.get('adminNotes') as string;
+    
+    await system.scheduleInterview(appId, date, notes);
+    document.querySelector('.modal-overlay')?.remove();
   });
 }
 

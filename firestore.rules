@@ -43,11 +43,26 @@ service cloud.firestore {
     function isValidUser(data) {
       return data.keys().hasAll(['id', 'name', 'email', 'role']) &&
              data.id is string &&
-             data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
              data.email is string &&
              data.role in ['applicant', 'admin', 'staff'] &&
              (!data.keys().contains('savedScholarships') || data.savedScholarships is list) &&
-             (!data.keys().contains('profile') || data.profile is map);
+             (!data.keys().contains('profile') || data.profile is map) &&
+             (!data.keys().contains('vaultDocuments') || data.vaultDocuments is list) &&
+             (!data.keys().contains('age') || (data.age is int && data.age >= 10 && data.age <= 100)) &&
+             (!data.keys().contains('gpa') || (data.gpa is number && data.gpa >= 0 && data.gpa <= 4)) &&
+             (!data.keys().contains('phone') || (data.phone is string && data.phone.size() <= 20)) &&
+             (!data.keys().contains('bio') || (data.bio is string && data.bio.size() <= 1000));
+    }
+
+    function isValidDocument(doc) {
+      return doc.keys().hasAll(['id', 'name', 'type', 'status', 'url', 'uploadedAt']) &&
+             doc.id is string &&
+             doc.name is string && doc.name.size() > 0 &&
+             doc.type in ['Identification', 'Academic', 'Financial', 'Other'] &&
+             doc.status in ['Pending', 'Approved', 'Rejected'] &&
+             doc.url is string &&
+             doc.uploadedAt is string;
     }
 
     function isValidScholarship(data) {
@@ -73,9 +88,9 @@ service cloud.firestore {
       allow list: if isAdmin();
       
       allow create: if isSignedIn() && isOwner(userId) && isValidUser(incoming());
-      allow update: if (isOwner(userId) || isAdmin()) && 
+      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(incoming()) &&
                     // Strict key check for updates
-                    incoming().diff(existing()).affectedKeys().hasOnly(['name', 'savedScholarships', 'updatedAt', 'role', 'profile', 'notifications', 'vaultDocuments']) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['name', 'savedScholarships', 'updatedAt', 'role', 'profile', 'notifications', 'vaultDocuments', 'age', 'gpa', 'phone', 'bio']) &&
                     (incoming().role == existing().role || isAdmin());
     }
 
@@ -115,6 +130,11 @@ service cloud.firestore {
     match /logs/{logId} {
       allow read: if isAdmin();
       allow create: if isSignedIn();
+    }
+
+    // Diagnostic collection for connection tests
+    match /test/{docId} {
+      allow get: if true;
     }
 
     // Admins collection
