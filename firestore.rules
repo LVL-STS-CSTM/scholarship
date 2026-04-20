@@ -22,7 +22,7 @@ service cloud.firestore {
     }
 
     function isBootstrapAdmin() {
-      return isSignedIn() && request.auth.token.email == 'forddinglasan.stats@gmail.com';
+      return isSignedIn() && request.auth.token.email == 'forddinglasan.stats@gmail.com' && isEmailVerified();
     }
 
     function isAdmin() {
@@ -46,13 +46,13 @@ service cloud.firestore {
              data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
              data.email is string &&
              data.role in ['applicant', 'admin', 'staff'] &&
-             (!data.keys().contains('savedScholarships') || data.savedScholarships is list) &&
-             (!data.keys().contains('profile') || data.profile is map) &&
-             (!data.keys().contains('vaultDocuments') || data.vaultDocuments is list) &&
-             (!data.keys().contains('age') || (data.age is int && data.age >= 10 && data.age <= 100)) &&
-             (!data.keys().contains('gpa') || (data.gpa is number && data.gpa >= 0 && data.gpa <= 4)) &&
-             (!data.keys().contains('phone') || (data.phone is string && data.phone.size() <= 20)) &&
-             (!data.keys().contains('bio') || (data.bio is string && data.bio.size() <= 1000));
+             (!('savedScholarships' in data) || data.savedScholarships is list) &&
+             (!('profile' in data) || data.profile is map) &&
+             (!('vaultDocuments' in data) || data.vaultDocuments is list) &&
+             (!('age' in data) || (data.age is int && data.age >= 10 && data.age <= 100)) &&
+             (!('gpa' in data) || (data.gpa is number && data.gpa >= 0 && data.gpa <= 4)) &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 20)) &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() <= 1000));
     }
 
     function isValidDocument(doc) {
