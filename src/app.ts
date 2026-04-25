@@ -81,6 +81,16 @@ class ScholarshipSystem {
           if (userDoc.exists()) {
             this.currentUser = userDoc.data() as User;
             
+            // Migration: Flatten profile to top level if it exists for backwards compatibility
+            if (this.currentUser.profile) {
+              this.currentUser = {
+                ...this.currentUser,
+                age: this.currentUser.age || this.currentUser.profile.age,
+                level: this.currentUser.level || this.currentUser.profile.level,
+                gpa: this.currentUser.gpa || this.currentUser.profile.gpa,
+              };
+            }
+            
             // Sync existing data for first admin if not configured
             if (this.currentUser.email === 'forddinglasan.stats@gmail.com' && this.currentUser.role !== 'admin') {
                await this.makeAdmin(firebaseUser.uid);
@@ -94,12 +104,12 @@ class ScholarshipSystem {
               role: 'applicant',
               savedScholarships: [],
               notifications: [],
-              profile: {
-                age: 18,
-                level: 'High School',
-                contact: '',
-                address: ''
-              }
+              age: 18,
+              level: 'Undergraduate',
+              gpa: 0,
+              phone: '',
+              bio: '',
+              createdAt: new Date().toISOString()
             };
             await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
             this.currentUser = newUser;
@@ -171,7 +181,15 @@ class ScholarshipSystem {
       const unsubUser = onSnapshot(doc(db, 'users', this.currentUser.id), 
         (docSnapshot) => {
           if (docSnapshot.exists()) {
-            const data = docSnapshot.data() as User;
+            let data = docSnapshot.data() as User;
+            if (data.profile) {
+              data = {
+                ...data,
+                age: data.age || data.profile.age,
+                level: data.level || data.profile.level,
+                gpa: data.gpa || data.profile.gpa,
+              };
+            }
             this.currentUser = data;
             this.render();
           }
@@ -388,9 +406,9 @@ class ScholarshipSystem {
     const total = 6;
 
     if (this.currentUser.name) points++;
-    if (this.currentUser.age) points++;
+    if (this.currentUser.age !== undefined) points++;
     if (this.currentUser.level) points++;
-    if (this.currentUser.gpa) points++;
+    if (this.currentUser.gpa !== undefined) points++;
     if (this.currentUser.email) points++;
     if (this.currentUser.vaultDocuments && this.currentUser.vaultDocuments.length > 0) points++;
 
@@ -993,6 +1011,7 @@ class ScholarshipSystem {
         ...data,
         updatedAt: new Date().toISOString()
       });
+      this.currentUser = { ...this.currentUser, ...data };
       this.addLog('info', 'User profile updated.');
       this.showToast('Profile updated successfully.', 'success');
       this.render();

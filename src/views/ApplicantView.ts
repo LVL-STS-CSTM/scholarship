@@ -141,7 +141,6 @@ export function renderSavedScholarships(parent: HTMLElement, system: any) {
           ${hasApplied ? `
             <span class="badge badge-success" style="padding: 0.5rem 1rem;">${system.t('Already Applied')}</span>
           ` : `
-            <button class="btn btn-outline btn-sm" onclick="window.system.getAIAnalysis('${s.id}')" title="${system.t('AI Match')} Analysis">${Icons.star(14)} ${system.t('AI Match')}</button>
             <button class="btn btn-outline btn-sm" onclick="window.system.smartApply('${s.id}')" title="${system.t('Smart Apply')} using Profile Data" style="white-space: nowrap;">${Icons.shield(14)} ${system.t('Smart Apply')}</button>
             <button class="btn btn-primary btn-sm" onclick="window.system.openApplyModal('${s.id}')" style="min-width: 80px;">${system.t('Apply')}</button>
           `}

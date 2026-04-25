@@ -50,6 +50,7 @@ service cloud.firestore {
              (!('profile' in data) || data.profile is map) &&
              (!('vaultDocuments' in data) || data.vaultDocuments is list) &&
              (!('age' in data) || (data.age is int && data.age >= 10 && data.age <= 100)) &&
+             (!('level' in data) || data.level is string) &&
              (!('gpa' in data) || (data.gpa is number && data.gpa >= 0 && data.gpa <= 4)) &&
              (!('phone' in data) || (data.phone is string && data.phone.size() <= 20)) &&
              (!('bio' in data) || (data.bio is string && data.bio.size() <= 1000));
@@ -90,7 +91,7 @@ service cloud.firestore {
       allow create: if isSignedIn() && isOwner(userId) && isValidUser(incoming());
       allow update: if (isOwner(userId) || isAdmin()) && isValidUser(incoming()) &&
                     // Strict key check for updates
-                    incoming().diff(existing()).affectedKeys().hasOnly(['name', 'savedScholarships', 'updatedAt', 'role', 'profile', 'notifications', 'vaultDocuments', 'age', 'gpa', 'phone', 'bio']) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['name', 'savedScholarships', 'updatedAt', 'role', 'profile', 'notifications', 'vaultDocuments', 'age', 'gpa', 'phone', 'bio', 'level']) &&
                     (incoming().role == existing().role || isAdmin());
     }
 
