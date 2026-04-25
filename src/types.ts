@@ -40,6 +40,7 @@ export interface User {
     level: string;
     contact: string;
     address: string;
+    gpa?: number;
   };
   createdAt?: string;
   updatedAt?: string;
@@ -73,16 +74,17 @@ export interface Application {
   id: string;
   userId: string;
   scholarshipId: string;
+  scholarshipTitle: string;
   name: string;
   age: number;
   level: string;
   gpa?: number;
   category: string;
   contact: string;
-  fileName: string;
   documents: Document[];
   status: 'Pending' | 'Reviewing' | 'Needs Revision' | 'Interview Scheduled' | 'Approved' | 'Rejected';
   timestamp: number;
+  submittedAt: string;
   adminNotes?: string;
   interviewDate?: number;
   verificationScore: number;

@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "scholarship-529eb",
     "public": "dist",
     "ignore": [
       "firebase.json",

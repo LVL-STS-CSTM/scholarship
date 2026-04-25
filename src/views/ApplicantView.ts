@@ -179,9 +179,6 @@ export function renderScholarshipCatalog(parent: HTMLElement, system: any) {
       <option value="7days">${system.t('Ending Soon (7 days)')}</option>
       <option value="30days">${system.t('Within 1 Month')}</option>
     </select>
-    <button class="btn ${system.showSmartMatches ? 'btn-primary' : 'btn-outline'}" onclick="window.system.toggleSmartMatches()" style="margin-left: auto;">
-      ${Icons.star(18)} ${system.t('AI Match')}
-    </button>
   `;
   parent.appendChild(searchBar);
 
@@ -219,20 +216,6 @@ export function renderScholarshipCatalog(parent: HTMLElement, system: any) {
     return matchesSearch && matchesCategory && matchesAmount && matchesDeadline;
   });
 
-  if (system.showSmartMatches && system.currentUser) {
-    filtered = filtered.map((s: any) => {
-      const score = system.performAutoVerification({ 
-        age: system.currentUser.age || 18, 
-        level: system.currentUser.profile?.level || 'Undergraduate',
-        gpa: system.currentUser.profile?.gpa || 3.0,
-        name: system.currentUser.name, 
-        contact: system.currentUser.email,
-        documents: system.currentUser.vaultDocuments || []
-      }, s).score;
-      return { ...s, matchScore: score };
-    }).sort((a: any, b: any) => b.matchScore - a.matchScore);
-  }
-
   const grid = document.createElement('div');
   grid.className = 'scholarship-grid fade-in';
   const isAdmin = system.currentUser?.role === 'admin';
@@ -246,10 +229,6 @@ export function renderScholarshipCatalog(parent: HTMLElement, system: any) {
           <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
             <div style="display: flex; flex-direction: column; gap: 0.5rem;">
               <span class="badge badge-primary" style="width: fit-content;">${s.category}</span>
-              <div style="display: flex; gap: 0.5rem;">
-                ${s.matchScore ? `<span class="badge badge-success">${s.matchScore}% Match</span>` : ''}
-                ${s.matchScore && s.matchScore >= 80 ? `<span class="badge" style="background: var(--color-warning); color: #854d0e; font-weight: 800; animation: pulse 2s infinite;">${Icons.star(12)} Recommended</span>` : ''}
-              </div>
             </div>
             <div style="display: flex; gap: 0.5rem;">
               ${isAdmin ? `
@@ -287,7 +266,6 @@ export function renderScholarshipCatalog(parent: HTMLElement, system: any) {
             ${isAdmin ? '' : hasApplied ? `
               <span class="badge badge-success" style="padding: 0.5rem 1rem;">${system.t('Already Applied')}</span>
             ` : `
-              <button class="btn btn-outline btn-sm" onclick="window.system.getAIAnalysis('${s.id}')" title="${system.t('AI Match')} Analysis">${Icons.star(14)} ${system.t('AI Match')}</button>
               <button class="btn btn-outline btn-sm" onclick="window.system.smartApply('${s.id}')" title="${system.t('Smart Apply')} using Profile Data" style="white-space: nowrap;">${Icons.shield(14)} ${system.t('Smart Apply')}</button>
               <button class="btn btn-primary btn-sm" onclick="window.system.openApplyModal('${s.id}')" style="min-width: 80px;">${system.t('Apply')}</button>
             `}

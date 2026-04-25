@@ -56,7 +56,7 @@ function getAIClient(): GoogleGenAI {
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY is not defined. Please check your environment variables.');
     }
-    aiClient = new GoogleGenAI(apiKey);
+    aiClient = new GoogleGenAI({ apiKey });
   }
   return aiClient;
 }

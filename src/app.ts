@@ -16,7 +16,6 @@ import {
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, addDoc, onSnapshot, query, where, orderBy, arrayUnion } from 'firebase/firestore';
 import { auth, db, handleFirestoreError } from './services/firebase';
 import { translations } from './translations';
-import { getScholarshipMatchAnalysis, getGeminiUsage } from './services/geminiService';
 
 declare const Chart: any;
 
@@ -35,7 +34,6 @@ class ScholarshipSystem {
   private statusFilter: string = 'All';
   private amountFilter: string = 'All';
   private deadlineFilter: string = 'All';
-  private showSmartMatches: boolean = false;
   private adminCurrentPage: number = 1;
   private adminFilterStatus: string = 'All';
   private adminFilterScholarship: string = 'All';
@@ -346,7 +344,7 @@ class ScholarshipSystem {
     }, 600);
   }
 
-  private performAutoVerification(app: Partial<Application>, scholarship: Scholarship): { score: number, status: 'Passed' | 'Flagged' | 'Failed' } {
+  public performAutoVerification(app: Partial<Application>, scholarship: Scholarship): { score: number, status: 'Passed' | 'Flagged' | 'Failed' } {
     let score = 0;
     
     // Age check
@@ -397,57 +395,6 @@ class ScholarshipSystem {
     if (this.currentUser.vaultDocuments && this.currentUser.vaultDocuments.length > 0) points++;
 
     return Math.round((points / total) * 100);
-  }
-
-  public async getAIAnalysis(scholarshipId: string) {
-    if (!this.currentUser) {
-      this.showToast('Please sign in to use AI analysis.', 'error');
-      return;
-    }
-
-    const scholarship = this.scholarships.find(s => s.id === scholarshipId);
-    if (!scholarship) return;
-
-    try {
-      this.showToast('AI is analyzing your profile...', 'info');
-      const analysis = await getScholarshipMatchAnalysis(this.currentUser, scholarship);
-      
-      const content = `
-        <div class="fade-in">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
-            <div style="font-size: 2.5rem; font-weight: 800; color: var(--color-primary);">${analysis.score}%</div>
-            <span class="status-badge status-${analysis.status.toLowerCase()}">${analysis.status}</span>
-          </div>
-          
-          <div style="background: var(--color-bg); padding: 1rem; border-radius: 0.75rem; margin-bottom: 1.5rem; line-height: 1.5;">
-            <p>${analysis.feedback}</p>
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-            <div>
-              <h4 style="font-size: 0.75rem; font-weight: 700; color: var(--color-success); text-transform: uppercase; margin-bottom: 0.5rem;">Strengths</h4>
-              <ul style="font-size: 0.8125rem; color: var(--color-secondary); padding-left: 1.25rem;">
-                ${analysis.strengths.map((s: string) => `<li>${s}</li>`).join('')}
-              </ul>
-            </div>
-            <div>
-              <h4 style="font-size: 0.75rem; font-weight: 700; color: var(--color-warning); text-transform: uppercase; margin-bottom: 0.5rem;">Focus Areas</h4>
-              <ul style="font-size: 0.8125rem; color: var(--color-secondary); padding-left: 1.25rem;">
-                ${analysis.gaps.map((g: string) => `<li>${g}</li>`).join('')}
-              </ul>
-            </div>
-          </div>
-          
-          <div style="margin-top: 2rem; font-size: 0.7rem; color: var(--color-secondary); text-align: center; font-style: italic;">
-            Powered by Gemini AI • Rate limited for cost management
-          </div>
-        </div>
-      `;
-      
-      this.showModal(`AI Analysis: ${scholarship.title}`, content);
-    } catch (error: any) {
-      this.showToast(error.message || 'AI analysis failed.', 'error');
-    }
   }
 
   public async toggleSaveScholarship(id: string) {
@@ -834,62 +781,82 @@ class ScholarshipSystem {
   }
 
   public async smartApply(scholarshipId: string) {
-    if (!this.currentUser) return;
+    if (!this.currentUser) {
+      this.showToast(this.t('Please sign in to apply.'), 'error');
+      return;
+    }
+    
+    console.log('Initiating Smart Apply for scholarship:', scholarshipId);
+    
     const s = this.scholarships.find(sc => sc.id === scholarshipId);
-    if (!s) return;
+    if (!s) {
+      console.error('Scholarship not found:', scholarshipId);
+      this.showToast('Scholarship data missing.', 'error');
+      return;
+    }
 
     if (this.applications.some(a => a.userId === this.currentUser!.id && a.scholarshipId === scholarshipId)) {
       this.showToast(this.t('You have already applied for this scholarship.'), 'error');
       return;
     }
 
-    const verification = this.performAutoVerification({
-      name: this.currentUser.name,
-      age: this.currentUser.age || 18, 
-      level: this.currentUser.profile?.level || 'Undergraduate',
-      contact: this.currentUser.email,
-      fileName: 'profile_docs.pdf'
-    }, s);
-
-    const documents = s.requirements.map((req) => {
-      // Try to find a matching document in the vault automatically
-      const vaultDocs = this.currentUser!.vaultDocuments || [];
-      const bestMatch = vaultDocs.find(d => 
-        d.name.toLowerCase().includes(req.toLowerCase()) || 
-        d.type.toLowerCase().includes(req.toLowerCase())
-      );
-
-      return {
-        id: Math.random().toString(36).substr(2, 9),
-        name: req + (bestMatch ? ` (${bestMatch.name})` : ' (Auto-filled)'),
-        type: bestMatch ? bestMatch.type : 'Requirement',
-        status: bestMatch ? bestMatch.status : 'Pending' as const,
-        url: bestMatch ? bestMatch.url : '#',
-        vaultDocId: bestMatch ? bestMatch.id : undefined
-      };
-    });
-
     try {
-      await addDoc(collection(db, 'applications'), {
+      const verification = this.performAutoVerification({
+        name: this.currentUser.name,
+        age: this.currentUser.age || this.currentUser.profile?.age || 18, 
+        level: this.currentUser.level || this.currentUser.profile?.level || 'Undergraduate',
+        gpa: this.currentUser.gpa || this.currentUser.profile?.gpa || 3.0,
+        contact: this.currentUser.email,
+      }, s);
+
+      const documents = s.requirements.map((req) => {
+        const vaultDocs = this.currentUser!.vaultDocuments || [];
+        const bestMatch = vaultDocs.find(d => 
+          d.name.toLowerCase().includes(req.toLowerCase()) || 
+          d.type.toLowerCase().includes(req.toLowerCase())
+        );
+
+        return {
+          id: Math.random().toString(36).substr(2, 9),
+          name: req + (bestMatch ? ` (${bestMatch.name})` : ' (Auto-filled)'),
+          type: bestMatch ? bestMatch.type : 'Requirement',
+          status: bestMatch ? bestMatch.status : 'Pending' as const,
+          url: bestMatch ? bestMatch.url : '#',
+          vaultDocId: bestMatch ? bestMatch.id : undefined,
+          uploadedAt: new Date().toISOString()
+        };
+      });
+
+      const payload = {
         userId: this.currentUser.id,
         scholarshipId: s.id,
         scholarshipTitle: s.title,
         name: this.currentUser.name,
-        age: this.currentUser.age || 18,
-        level: this.currentUser.profile?.level || 'Undergraduate',
+        age: this.currentUser.age || this.currentUser.profile?.age || 18,
+        level: this.currentUser.level || this.currentUser.profile?.level || 'Undergraduate',
         category: s.category,
         contact: this.currentUser.email,
         documents: documents,
         status: 'Pending',
         submittedAt: new Date().toISOString(),
+        timestamp: Date.now(),
         verificationScore: verification.score,
         verificationStatus: verification.status
-      });
+      };
+
+      console.log('Submitting Smart Apply payload:', payload);
+      await addDoc(collection(db, 'applications'), payload);
+      
       this.addLog('info', `Smart Application submitted by ${this.currentUser.name} for ${s.title}.`);
       this.showToast(this.t('Application submitted successfully!'), 'success');
       this.setView('dashboard');
     } catch (e) {
-      handleFirestoreError(e, 'create', 'applications');
+      console.error('Smart Apply failed:', e);
+      if (e instanceof Error && e.message.includes('permission-denied')) {
+        handleFirestoreError(e, 'create', 'applications');
+      } else {
+        this.showToast('Failed to submit application. Please try again.', 'error');
+      }
     }
   }
 
@@ -1263,11 +1230,6 @@ class ScholarshipSystem {
     } catch (e) {
       handleFirestoreError(e, 'update', `applications/${appId}`);
     }
-  }
-
-  public toggleSmartMatches() {
-    this.showSmartMatches = !this.showSmartMatches;
-    this.render();
   }
 
   public async promptScheduleInterview(appId: string) {
