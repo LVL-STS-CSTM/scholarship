@@ -400,6 +400,21 @@ class ScholarshipSystem {
     return { score, status };
   }
 
+  public getSmartMatch(scholarshipId: string): { score: number, status: string } {
+    if (!this.currentUser) return { score: 0, status: 'Failed' };
+
+    const s = this.scholarships.find(sc => sc.id === scholarshipId);
+    if (!s) return { score: 0, status: 'Failed' };
+
+    return this.performAutoVerification({
+      name: this.currentUser.name,
+      age: this.currentUser.age || 18,
+      level: this.currentUser.level || 'Undergraduate',
+      gpa: this.currentUser.gpa || 3.0,
+      contact: this.currentUser.email,
+    }, s);
+  }
+
   public calculateProfileCompleteness(): number {
     if (!this.currentUser) return 0;
     let points = 0;

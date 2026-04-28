@@ -111,11 +111,21 @@ export function renderSavedScholarships(parent: HTMLElement, system: any) {
   grid.className = 'scholarship-grid fade-in';
   grid.innerHTML = saved.map((s: any) => {
     const hasApplied = system.applications.some((a: any) => a.userId === system.currentUser?.id && a.scholarshipId === s.id);
+    const eligibility = system.getSmartMatch(s.id);
+    const badgeColor = eligibility.score >= 85 ? 'success' : (eligibility.score >= 50 ? 'warning' : 'danger');
+
     return `
     <div class="card scholarship-card">
       <div class="content">
         <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
-          <span class="badge badge-primary">${s.category}</span>
+          <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+            <span class="badge badge-primary" style="width: fit-content;">${s.category}</span>
+            ${system.currentUser ? `
+              <div class="badge badge-${badgeColor}" style="font-size: 0.625rem; width: fit-content;" title="${system.t('Eligibility')} Score">
+                ${eligibility.score}% Match
+              </div>
+            ` : ''}
+          </div>
           <button class="btn btn-outline text-danger bg-danger-light" onclick="window.system.toggleSaveScholarship('${s.id}')" style="padding: 0; width: 32px; height: 32px; border-radius: 50%; border: none;" title="Remove from saved">
             ${Icons.trash(16)}
           </button>
@@ -222,12 +232,20 @@ export function renderScholarshipCatalog(parent: HTMLElement, system: any) {
   grid.innerHTML = filtered.map((s: any) => {
     const isSaved = system.currentUser?.savedScholarships?.includes(s.id);
     const hasApplied = system.applications.some((a: any) => a.userId === system.currentUser?.id && a.scholarshipId === s.id);
+    const eligibility = system.getSmartMatch(s.id);
+    const badgeColor = eligibility.score >= 85 ? 'success' : (eligibility.score >= 50 ? 'warning' : 'danger');
+
     return `
       <div class="card scholarship-card">
         <div class="content">
           <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
             <div style="display: flex; flex-direction: column; gap: 0.5rem;">
               <span class="badge badge-primary" style="width: fit-content;">${s.category}</span>
+              ${system.currentUser ? `
+                <div class="badge badge-${badgeColor}" style="font-size: 0.625rem; width: fit-content;" title="${system.t('Eligibility')} Score">
+                  ${eligibility.score}% Match
+                </div>
+              ` : ''}
             </div>
             <div style="display: flex; gap: 0.5rem;">
               ${isAdmin ? `
